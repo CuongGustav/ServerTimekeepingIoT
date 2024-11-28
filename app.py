@@ -19,16 +19,22 @@ def send_text():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/get_text', methods = ['GET'])
+@app.route('/get_text', methods=['GET'])
 def get_text():
     if not os.path.exists(FILE_PATH):
-        return jsonify({'error': ''}), 404 
+        return jsonify({'error': 'Không tìm thấy tệp'}), 404
     try:
         with open(FILE_PATH, 'r') as file:
-            data = json.load(file)
+            content = file.read()
+            if not content.strip():  # Nếu tệp rỗng
+                return jsonify({}), 200  # Trả về JSON rỗng
+            data = json.loads(content)  # Phân tích cú pháp JSON
         return jsonify(data), 200
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Định dạng JSON không hợp lệ'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/check_text', methods = ['POST'])
 def checktext():  
