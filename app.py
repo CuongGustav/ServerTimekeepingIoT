@@ -103,6 +103,48 @@ def send_data():
 
     return jsonify({"message": "Data saved successfully"}), 200
 
+# # Endpoint get_data
+# @app.route('/get_data', methods=['GET'])
+# def get_data():
+#     with conn.cursor() as cur:
+#         # Lấy dữ liệu từ database
+#         cur.execute("SELECT status, userId FROM text_data LIMIT 1;")
+#         text_data = cur.fetchone()
+
+#         cur.execute("SELECT image_path FROM image_data LIMIT 1;")
+#         image_data = cur.fetchone()
+
+#         if not text_data or not image_data:
+#             return jsonify({"error": "No data available"}), 404
+
+#         # Lấy thông tin status, userId và đường dẫn ảnh
+#         status = text_data[0]
+#         userId = text_data[1]
+#         image_path = image_data[0]
+
+#         # Kiểm tra nếu file ảnh không tồn tại
+#         if not os.path.exists(image_path):
+#             return jsonify({"error": "Image file not found"}), 404
+
+#         # Trả về dữ liệu dưới dạng form-data
+#         def generate():
+#             boundary = "----CustomBoundaryForMultipart"
+#             yield f"--{boundary}\r\n"
+#             yield f'Content-Disposition: form-data; name="status"\r\n\r\n{status}\r\n'
+#             yield f"--{boundary}\r\n"
+#             yield f'Content-Disposition: form-data; name="userId"\r\n\r\n{userId}\r\n'
+#             yield f"--{boundary}\r\n"
+#             yield f'Content-Disposition: form-data; name="image"; filename="{os.path.basename(image_path)}"\r\n'
+#             yield "Content-Type: image/jpeg\r\n\r\n"
+#             with open(image_path, "rb") as img_file:
+#                 yield img_file.read()
+#             yield f"\r\n--{boundary}--\r\n"
+
+#         headers = {
+#             "Content-Type": f"multipart/form-data; boundary=----CustomBoundaryForMultipart"
+#         }
+#         return Response(generate(), headers=headers)
+
 # Endpoint get_data
 @app.route('/get_data', methods=['GET'])
 def get_data():
@@ -126,24 +168,18 @@ def get_data():
         if not os.path.exists(image_path):
             return jsonify({"error": "Image file not found"}), 404
 
-        # Trả về dữ liệu dưới dạng form-data
-        def generate():
-            boundary = "----CustomBoundaryForMultipart"
-            yield f"--{boundary}\r\n"
-            yield f'Content-Disposition: form-data; name="status"\r\n\r\n{status}\r\n'
-            yield f"--{boundary}\r\n"
-            yield f'Content-Disposition: form-data; name="userId"\r\n\r\n{userId}\r\n'
-            yield f"--{boundary}\r\n"
-            yield f'Content-Disposition: form-data; name="image"; filename="{os.path.basename(image_path)}"\r\n'
-            yield "Content-Type: image/jpeg\r\n\r\n"
-            with open(image_path, "rb") as img_file:
-                yield img_file.read()
-            yield f"\r\n--{boundary}--\r\n"
+        # Đọc nội dung ảnh dưới dạng base64 để gửi trong JSON
+        with open(image_path, "rb") as img_file:
+            import base64
+            image_base64 = base64.b64encode(img_file.read()).decode('utf-8')
 
-        headers = {
-            "Content-Type": f"multipart/form-data; boundary=----CustomBoundaryForMultipart"
-        }
-        return Response(generate(), headers=headers)
+        # Trả về dữ liệu dạng JSON
+        return jsonify({
+            "status": status,
+            "userId": userId,
+            "image": image_base64
+        }), 200
+
 
 # Endpoint check_data
 @app.route('/check_data', methods=['POST'])
