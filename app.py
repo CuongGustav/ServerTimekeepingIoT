@@ -3,6 +3,8 @@ import psycopg2
 import os
 import uuid
 from flask_cors import CORS
+import time
+from threading import Lock
 
 app = Flask(__name__)
 CORS(app)
@@ -71,10 +73,12 @@ def clear_data():
         """)
         conn.commit()
 
-# Endpoint send_data
+recent_users = {}
+lock = Lock()
+
 @app.route('/send_data', methods=['POST'])
 def send_data():
-    # Kiểm tra dữ liệu đầu vào
+    # Lấy dữ liệu từ yêu cầu
     status = request.form.get('status')
     userId = request.form.get('userId')
     image = request.files.get('image')
@@ -82,7 +86,20 @@ def send_data():
     if not status or not userId or not image:
         return jsonify({"error": "Missing data"}), 400
 
-    # Xóa dữ liệu hiện tại nếu có dữ liệu mới
+    current_time = time.time()  # Thời gian hiện tại tính bằng giây
+
+    with lock:
+        # Kiểm tra xem userId có trong dictionary hay không
+        if userId in recent_users:
+            last_time = recent_users[userId]
+            # Nếu trong vòng 15 giây, bỏ qua yêu cầu
+            if current_time - last_time <= 15:
+                return jsonify({"message": "Data already saved within the last 15 seconds"}), 200
+
+        # Cập nhật thời gian xử lý gần nhất
+        recent_users[userId] = current_time
+
+    # Xóa dữ liệu cũ trước khi lưu mới
     clear_data()
 
     # Lưu ảnh vào thư mục static
@@ -102,48 +119,6 @@ def send_data():
         conn.commit()
 
     return jsonify({"message": "Data saved successfully"}), 200
-
-# # Endpoint get_data
-# @app.route('/get_data', methods=['GET'])
-# def get_data():
-#     with conn.cursor() as cur:
-#         # Lấy dữ liệu từ database
-#         cur.execute("SELECT status, userId FROM text_data LIMIT 1;")
-#         text_data = cur.fetchone()
-
-#         cur.execute("SELECT image_path FROM image_data LIMIT 1;")
-#         image_data = cur.fetchone()
-
-#         if not text_data or not image_data:
-#             return jsonify({"error": "No data available"}), 404
-
-#         # Lấy thông tin status, userId và đường dẫn ảnh
-#         status = text_data[0]
-#         userId = text_data[1]
-#         image_path = image_data[0]
-
-#         # Kiểm tra nếu file ảnh không tồn tại
-#         if not os.path.exists(image_path):
-#             return jsonify({"error": "Image file not found"}), 404
-
-#         # Trả về dữ liệu dưới dạng form-data
-#         def generate():
-#             boundary = "----CustomBoundaryForMultipart"
-#             yield f"--{boundary}\r\n"
-#             yield f'Content-Disposition: form-data; name="status"\r\n\r\n{status}\r\n'
-#             yield f"--{boundary}\r\n"
-#             yield f'Content-Disposition: form-data; name="userId"\r\n\r\n{userId}\r\n'
-#             yield f"--{boundary}\r\n"
-#             yield f'Content-Disposition: form-data; name="image"; filename="{os.path.basename(image_path)}"\r\n'
-#             yield "Content-Type: image/jpeg\r\n\r\n"
-#             with open(image_path, "rb") as img_file:
-#                 yield img_file.read()
-#             yield f"\r\n--{boundary}--\r\n"
-
-#         headers = {
-#             "Content-Type": f"multipart/form-data; boundary=----CustomBoundaryForMultipart"
-#         }
-#         return Response(generate(), headers=headers)
 
 # Endpoint get_data
 @app.route('/get_data', methods=['GET'])
