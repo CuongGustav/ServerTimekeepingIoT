@@ -89,15 +89,16 @@ def send_data():
     current_time = time.time()  # Thời gian hiện tại tính bằng giây
 
     with lock:
-        # Kiểm tra xem userId có trong dictionary hay không
-        if userId in recent_users:
-            last_time = recent_users[userId]
+        # Kiểm tra xem (userId, status) có trong dictionary hay không
+        user_status_key = (userId, status)
+        if user_status_key in recent_users:
+            last_time = recent_users[user_status_key]
             # Nếu trong vòng 15 giây, bỏ qua yêu cầu
             if current_time - last_time <= 15:
-                return jsonify({"message": "Data already saved within the last 15 seconds"}), 200
+                return jsonify({"message": "Data already saved within the last 15 seconds for the same user and status"}), 200
 
-        # Cập nhật thời gian xử lý gần nhất
-        recent_users[userId] = current_time
+        # Cập nhật thời gian xử lý gần nhất cho (userId, status)
+        recent_users[user_status_key] = current_time
 
     # Xóa dữ liệu cũ trước khi lưu mới
     clear_data()
@@ -111,7 +112,7 @@ def send_data():
     with conn.cursor() as cur:
         cur.execute("INSERT INTO text_data (status, userId) VALUES (%s, %s);", (status, userId))
         cur.execute("INSERT INTO image_data (image_path) VALUES (%s);", (image_path,))
-        cur.execute("""
+        cur.execute(""" 
             UPDATE status 
             SET image_status = TRUE, status_status = TRUE, userId_status = TRUE
             WHERE id = 1;
@@ -119,6 +120,7 @@ def send_data():
         conn.commit()
 
     return jsonify({"message": "Data saved successfully"}), 200
+
 
 # Endpoint get_data
 @app.route('/get_data', methods=['GET'])
