@@ -17,39 +17,48 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Kết nối đến PostgreSQL
 conn = psycopg2.connect(
-    dbname="dbiot06",
-    user="dbiot06_user",
-    password="nMnOWsqIF12dIU0L9sYhMjQakH6skpMN",
-    host="dpg-ct68db5umphs7394idtg-a.singapore-postgres.render.com",
+    dbname="iotdb_f0sh",
+    user="iotdb_f0sh_user",
+    password="1CvEnRjDvzQwb745zituT9wudiUQRJT2",
+    host="dpg-ctc4be8gph6c73abhgt0-a.singapore-postgres.render.com",
     port="5432"
 )
 
 # Tạo bảng nếu chưa tồn tại
 def create_all_tables():
     with conn.cursor() as cur:
+        # Wrap the table name 'user' in double quotes
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS text_data (
+            CREATE TABLE IF NOT EXISTS "user" (
                 id SERIAL PRIMARY KEY,
                 status TEXT NOT NULL,
-                userId TEXT NOT NULL
+                "userId" TEXT NOT NULL
             );
         """)
+        
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS image_data (
+            CREATE TABLE IF NOT EXISTS image (
                 id SERIAL PRIMARY KEY,
-                image_path TEXT NOT NULL
+                imagePath TEXT NOT NULL,
+                "userId" INTEGER REFERENCES "user"(id) ON DELETE CASCADE
             );
         """)
+        
         cur.execute("""
             CREATE TABLE IF NOT EXISTS status (
                 id SERIAL PRIMARY KEY,
-                image_status BOOLEAN DEFAULT TRUE,
-                status_status BOOLEAN DEFAULT TRUE,
-                userId_status BOOLEAN DEFAULT TRUE
+                imageStatus BOOLEAN DEFAULT TRUE,
+                statusStatus BOOLEAN DEFAULT TRUE,
+                userIdStatus BOOLEAN DEFAULT TRUE,
+                "userId" INTEGER REFERENCES "user"(id) ON DELETE CASCADE,
+                imageId INTEGER REFERENCES image(id) ON DELETE CASCADE
             );
         """)
+
         # Khởi tạo trạng thái nếu chưa tồn tại
         cur.execute("INSERT INTO status (id) VALUES (1) ON CONFLICT (id) DO NOTHING;")
+        
+        # Commit các thay đổi
         conn.commit()
 
 create_all_tables()
@@ -58,8 +67,8 @@ create_all_tables()
 def clear_data():
     with conn.cursor() as cur:
         # Xóa dữ liệu trong database
-        cur.execute("DELETE FROM text_data;")
-        cur.execute("DELETE FROM image_data;")
+        cur.execute("DELETE FROM \"user\";")
+        cur.execute("DELETE FROM image;")
         # Xóa ảnh trong thư mục static
         for file in os.listdir(UPLOAD_FOLDER):
             file_path = os.path.join(UPLOAD_FOLDER, file)
@@ -68,7 +77,7 @@ def clear_data():
         # Cập nhật trạng thái
         cur.execute("""
             UPDATE status 
-            SET image_status = FALSE, status_status = FALSE, userId_status = FALSE
+            SET imageStatus = FALSE, statusStatus = FALSE, userIdStatus = FALSE
             WHERE id = 1;
         """)
         conn.commit()
@@ -110,13 +119,18 @@ def send_data():
 
     # Lưu dữ liệu mới vào database
     with conn.cursor() as cur:
-        cur.execute("INSERT INTO text_data (status, userId) VALUES (%s, %s);", (status, userId))
-        cur.execute("INSERT INTO image_data (image_path) VALUES (%s);", (image_path,))
-        cur.execute(""" 
+        cur.execute("INSERT INTO \"user\" (status, \"userId\") VALUES (%s, %s) RETURNING id;", (status, userId))
+        user_id = cur.fetchone()[0]
+        
+        cur.execute("INSERT INTO image (imagePath, \"userId\") VALUES (%s, %s) RETURNING id;", (image_path, user_id))
+        image_id = cur.fetchone()[0]
+        
+        cur.execute("""
             UPDATE status 
-            SET image_status = TRUE, status_status = TRUE, userId_status = TRUE
+            SET imageStatus = TRUE, statusStatus = TRUE, userIdStatus = TRUE, "userId" = %s, imageId = %s
             WHERE id = 1;
-        """)
+        """, (user_id, image_id))
+        
         conn.commit()
 
     return jsonify({"message": "Data saved successfully"}), 200
@@ -127,10 +141,10 @@ def send_data():
 def get_data():
     with conn.cursor() as cur:
         # Lấy dữ liệu từ database
-        cur.execute("SELECT status, userId FROM text_data LIMIT 1;")
+        cur.execute("SELECT status, \"userId\" FROM \"user\" LIMIT 1;")
         text_data = cur.fetchone()
 
-        cur.execute("SELECT image_path FROM image_data LIMIT 1;")
+        cur.execute("SELECT imagePath FROM image LIMIT 1;")
         image_data = cur.fetchone()
 
         if not text_data or not image_data:
